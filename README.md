@@ -1,1 +1,1 @@
-# tunc-contest-1-tests-playground
+# func-contest-1-tests-playground

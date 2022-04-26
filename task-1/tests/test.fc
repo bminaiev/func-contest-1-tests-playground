@@ -1,0 +1,37 @@
+
+
+() set_default_initial_data() impure {
+  set_data(begin_cell().store_uint(0, 64).end_cell());
+}
+
+;; Every test name should start with "__test"
+int __test_example() method_id {
+    set_default_initial_data();
+
+    cell message = begin_cell().store_uint(10, 32).end_cell();
+    recv_internal(message.begin_parse());
+
+    int cur_total = get_total();
+    throw_if(101, cur_total != 10);
+    return 0;
+}
+
+;; by default 'persistent data' is not copied from previous test
+int __test_no_initial_data_should_fail() method_id {
+    int cur_total = get_total();
+    ;; TODO: check exit code
+    throw_if(101, cur_total != 0);
+    return 0;
+}
+
+;; you can copy 'persistent data' from previous test by calling `get_prev_c4()`
+int __test_data_from_prev_test() method_id {
+    set_data(get_prev_c4());
+    int cur_total = get_total();
+    throw_if(101, cur_total != 10);
+    return 0;
+}
+
+
+
+

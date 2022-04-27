@@ -4,12 +4,38 @@
   set_data(begin_cell().store_uint(0, 64).end_cell());
 }
 
+;; (fun, [args] -> (exit_code, gas_used, [return values]))
+;; TODO: calculate gas used
+forall F, A, R -> (int, int, R) invoke_method(F fun, A args) impure asm
+  "0x2c46db6b PUSHINT ROTREV"        ;; we push some magic number to the stack, so we can figure out where return values ends
+  "255 PUSHINT EXPLODEVAR"           ;; (magic, fun, arg_1, arg_2, ..., arg_n, n)
+  "DUP INC ROLLX"                    ;; (magic, arg_1, arg_2, ..., arg_n, n, fun)
+  "<{"
+    "<{"                             ;; <- normal execution
+      "EXECUTE"
+      "NIL"                          ;; (magic, res_1, res_2, ..., res_k, [])
+        "<{"
+          "SWAP DUP "                ;; (magic, res_1, res_2, ..., [], res_k, res_k)
+          "0x2c46db6b PUSHINT NEQ" ;; TODO: quiet version
+        "}> PUSHCONT"
+        "<{ COMMA }> PUSHCONT"
+      "WHILE"                        ;; (magic, [res_1, res_2, ..., res_k])
+      "DROP ZERO ZERO ROT"      ;; (exit_code = 0, gas_used = 0, [res..])
+    "}> PUSHCONT"
+    "<{ SWAP DROP ZERO NIL }> PUSHCONT" ;; <- exception handler
+    "TRY"
+  "}> PUSHCONT"                      ;; (magic, args.., n, fun, func_with_exception_wrapper)
+  "ROT INC INC -1 PUSHINT"           ;; (magic, args.., fun, func_with_exception_wrapper, n + 2, -1)
+  "CALLXVARARGS"                     ;; (exit_code, gas_used, [res..])
+;
+
+
 ;; Every test name should start with "__test"
 int __test_example() method_id {
     set_default_initial_data();
 
     cell message = begin_cell().store_uint(10, 32).end_cell();
-    recv_internal(message.begin_parse());
+    invoke_method(recv_internal, [message.begin_parse()]);
 
     int cur_total = get_total();
     throw_if(101, cur_total != 10);
@@ -18,20 +44,32 @@ int __test_example() method_id {
 
 ;; by default 'persistent data' is not copied from previous test
 int __test_no_initial_data_should_fail() method_id {
-    int cur_total = get_total();
-    ;; TODO: check exit code
-    throw_if(101, cur_total != 0);
+    (int exit_code, _, _) = invoke_method(get_total, []);
+    throw_if(101, exit_code == 0);
     return 0;
+}
+
+int __test_set_data() method_id {
+  return __test_example();
 }
 
 ;; you can copy 'persistent data' from previous test by calling `get_prev_c4()`
 int __test_data_from_prev_test() method_id {
     set_data(get_prev_c4());
-    int cur_total = get_total();
-    throw_if(101, cur_total != 10);
+    var (int exit_code, _, stack) = invoke_method(get_total, []);
+    throw_if(101, exit_code != 0);
+    var [total] = stack;
+    throw_if(102, total != 10);
     return 0;
 }
 
 
-
+int __test_throw_doesnt_corrupt_stack() method_id {
+    int check_stack_is_not_corrupted = 123;
+    (int exit_code, _, _) = invoke_method(get_total, []);
+    throw_if(101, exit_code == 0); ;; it throws because persistent data is empty
+    ;; even if contract method throws an exception, test suite should not be affected
+    throw_if(102, check_stack_is_not_corrupted != 123);
+    return 0;
+}
 

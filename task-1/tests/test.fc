@@ -7,25 +7,18 @@
 ;; (fun, [args] -> (exit_code, gas_used, [return values]))
 ;; TODO: calculate gas used
 forall F, A, R -> (int, int, R) invoke_method(F fun, A args) impure asm
-  "0x2c46db6b PUSHINT ROTREV"        ;; we push some magic number to the stack, so we can figure out where return values ends
-  "255 PUSHINT EXPLODEVAR"           ;; (magic, fun, arg_1, arg_2, ..., arg_n, n)
-  "DUP INC ROLLX"                    ;; (magic, arg_1, arg_2, ..., arg_n, n, fun)
+  "255 PUSHINT EXPLODEVAR"           ;; (fun, arg_1, arg_2, ..., arg_n, n)
+  "DUP INC ROLLX"                    ;; (arg_1, arg_2, ..., arg_n, n, fun)
   "<{"
     "<{"                             ;; <- normal execution
       "EXECUTE"
-      "NIL"                          ;; (magic, res_1, res_2, ..., res_k, [])
-        "<{"
-          "SWAP DUP "                ;; (magic, res_1, res_2, ..., [], res_k, res_k)
-          "0x2c46db6b PUSHINT NEQ" ;; TODO: quiet version
-        "}> PUSHCONT"
-        "<{ COMMA }> PUSHCONT"
-      "WHILE"                        ;; (magic, [res_1, res_2, ..., res_k])
-      "DROP ZERO ZERO ROT"      ;; (exit_code = 0, gas_used = 0, [res..])
+      "DEPTH TUPLEVAR"               ;; ([res_1, res_2, ..., res_k])
+      "ZERO ZERO ROT"                ;; (exit_code = 0, gas_used = 0, [res..])
     "}> PUSHCONT"
     "<{ SWAP DROP ZERO NIL }> PUSHCONT" ;; <- exception handler
     "TRY"
-  "}> PUSHCONT"                      ;; (magic, args.., n, fun, func_with_exception_wrapper)
-  "ROT INC INC -1 PUSHINT"           ;; (magic, args.., fun, func_with_exception_wrapper, n + 2, -1)
+  "}> PUSHCONT"                      ;; (args.., n, fun, func_with_exception_wrapper)
+  "ROT INC -1 PUSHINT"               ;; (args.., fun, func_with_exception_wrapper, n + 1, -1)
   "CALLXVARARGS"                     ;; (exit_code, gas_used, [res..])
 ;
 
@@ -73,3 +66,19 @@ int __test_throw_doesnt_corrupt_stack() method_id {
     return 0;
 }
 
+
+
+(int, cell) build_test_cell(int x, int y) method_id {
+  return (12345, begin_cell().store_uint(x, 64).store_uint(y, 64).end_cell());
+}
+
+int __test_not_integer_return_types() method_id {
+  var (int exit_code, _, stack) = invoke_method(build_test_cell, [100, 500]);
+  throw_if(101, exit_code != 0);
+  [int res, cell c] = stack;
+  throw_if(102, res != 12345);
+  slice s = c.begin_parse();
+  throw_if(103, s~load_uint(64) != 100);
+  throw_if(104, s~load_uint(64) != 500);
+  return 0;
+}

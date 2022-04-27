@@ -94,7 +94,7 @@ int __test_empty_method_gas_consumption() method_id {
 
   cell message = begin_cell().store_uint(10, 32).end_cell();
   (int exit_code, int gas_used3, _) = invoke_method(recv_internal, [message.begin_parse()]);
-  throw_if(102, exit_code != 0);
+  throw_if(103, exit_code != 0);
 
   return [gas_used1, gas_used2, gas_used3];
 }

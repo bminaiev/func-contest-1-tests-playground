@@ -8,7 +8,7 @@ int __test_example() method_id {
 
     cell message = begin_cell().store_uint(10, 32).end_cell();
     ;; when calling contract's method, 'invoke_method' should be used
-    ;; it caches exceptions, int compute gas usage
+    ;; it catches exceptions, and computes gas usage
     (int exit_code, int gas_used1, _) = invoke_method(recv_internal, [message.begin_parse()]);
     throw_if(101, exit_code != 0);
     var (int exit_code, int gas_used2, stack) = invoke_method(get_total, []);

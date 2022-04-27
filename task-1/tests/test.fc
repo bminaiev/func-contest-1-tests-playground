@@ -1,45 +1,28 @@
-
-
 () set_default_initial_data() impure {
   set_data(begin_cell().store_uint(0, 64).end_cell());
 }
-
-;; (fun, [args] -> (exit_code, gas_used, [return values]))
-;; TODO: calculate gas used
-forall F, A, R -> (int, int, R) invoke_method(F fun, A args) impure asm
-  "255 PUSHINT EXPLODEVAR"           ;; (fun, arg_1, arg_2, ..., arg_n, n)
-  "DUP INC ROLLX"                    ;; (arg_1, arg_2, ..., arg_n, n, fun)
-  "<{"
-    "<{"                             ;; <- normal execution
-      "EXECUTE"
-      "DEPTH TUPLEVAR"               ;; ([res_1, res_2, ..., res_k])
-      "ZERO ZERO ROT"                ;; (exit_code = 0, gas_used = 0, [res..])
-    "}> PUSHCONT"
-    "<{ SWAP DROP ZERO NIL }> PUSHCONT" ;; <- exception handler
-    "TRY"
-  "}> PUSHCONT"                      ;; (args.., n, fun, func_with_exception_wrapper)
-  "ROT INC -1 PUSHINT"               ;; (args.., fun, func_with_exception_wrapper, n + 1, -1)
-  "CALLXVARARGS"                     ;; (exit_code, gas_used, [res..])
-;
-
 
 ;; Every test name should start with "__test"
 int __test_example() method_id {
     set_default_initial_data();
 
     cell message = begin_cell().store_uint(10, 32).end_cell();
-    invoke_method(recv_internal, [message.begin_parse()]);
-
-    int cur_total = get_total();
-    throw_if(101, cur_total != 10);
-    return 0;
+    ;; when calling contract's method, 'invoke_method' should be used
+    ;; it caches exceptions, int compute gas usage
+    (int exit_code, int gas_used1, _) = invoke_method(recv_internal, [message.begin_parse()]);
+    throw_if(101, exit_code != 0);
+    var (int exit_code, int gas_used2, stack) = invoke_method(get_total, []);
+    throw_if(102, exit_code != 0);
+    [int total] = stack;
+    throw_if(103, total != 10);
+    return gas_used1 + gas_used2;
 }
 
 ;; by default 'persistent data' is not copied from previous test
 int __test_no_initial_data_should_fail() method_id {
-    (int exit_code, _, _) = invoke_method(get_total, []);
+    (int exit_code, int gas_used, _) = invoke_method(get_total, []);
     throw_if(101, exit_code == 0);
-    return 0;
+    return gas_used;
 }
 
 int __test_set_data() method_id {
@@ -49,21 +32,21 @@ int __test_set_data() method_id {
 ;; you can copy 'persistent data' from previous test by calling `get_prev_c4()`
 int __test_data_from_prev_test() method_id {
     set_data(get_prev_c4());
-    var (int exit_code, _, stack) = invoke_method(get_total, []);
+    var (int exit_code, int gas_used, stack) = invoke_method(get_total, []);
     throw_if(101, exit_code != 0);
     var [total] = stack;
     throw_if(102, total != 10);
-    return 0;
+    return gas_used;
 }
 
 
 int __test_throw_doesnt_corrupt_stack() method_id {
     int check_stack_is_not_corrupted = 123;
-    (int exit_code, _, _) = invoke_method(get_total, []);
+    (int exit_code, int gas_used, _) = invoke_method(get_total, []);
     throw_if(101, exit_code == 0); ;; it throws because persistent data is empty
     ;; even if contract method throws an exception, test suite should not be affected
     throw_if(102, check_stack_is_not_corrupted != 123);
-    return 0;
+    return gas_used;
 }
 
 
@@ -73,12 +56,45 @@ int __test_throw_doesnt_corrupt_stack() method_id {
 }
 
 int __test_not_integer_return_types() method_id {
-  var (int exit_code, _, stack) = invoke_method(build_test_cell, [100, 500]);
+  var (int exit_code, int gas_used, stack) = invoke_method(build_test_cell, [100, 500]);
   throw_if(101, exit_code != 0);
   [int res, cell c] = stack;
   throw_if(102, res != 12345);
   slice s = c.begin_parse();
   throw_if(103, s~load_uint(64) != 100);
   throw_if(104, s~load_uint(64) != 500);
-  return 0;
+  return gas_used;
+}
+
+() empty_method() inline method_id {
+
+}
+
+;; returned 'gas used' also contains gas used by a wrapper.
+;; It is ~roughty constant, so when developers are optimizing
+;; their contracts, they should care about differences in gas usage
+;; before and after optimizations, not absolute values.
+int __test_empty_method_gas_consumption() method_id {
+  var (_, int gas_used, _) = invoke_method(empty_method, []);
+  throw_if(101, gas_used != 1101);
+  return gas_used;
+}
+
+;; You can return several values as tuples, they will be shown in the output
+[int, int, int] __test_can_return_complex_type_from_test() method_id {
+  set_default_initial_data();
+
+  cell message = begin_cell().store_uint(10, 32).end_cell();
+  (int exit_code, int gas_used1, _) = invoke_method(recv_internal, [message.begin_parse()]);
+  throw_if(101, exit_code != 0);
+
+  cell message = begin_cell().store_uint(100, 32).end_cell();
+  (int exit_code, int gas_used2, _) = invoke_method(recv_internal, [message.begin_parse()]);
+  throw_if(102, exit_code != 0);
+
+  cell message = begin_cell().store_uint(10, 32).end_cell();
+  (int exit_code, int gas_used3, _) = invoke_method(recv_internal, [message.begin_parse()]);
+  throw_if(102, exit_code != 0);
+
+  return [gas_used1, gas_used2, gas_used3];
 }

@@ -71,7 +71,7 @@ int __test_not_integer_return_types() method_id {
 }
 
 ;; returned 'gas used' also contains gas used by a wrapper.
-;; It is ~roughty constant, so when developers are optimizing
+;; It is ~roughly constant, so when developers are optimizing
 ;; their contracts, they should care about differences in gas usage
 ;; before and after optimizations, not absolute values.
 int __test_empty_method_gas_consumption() method_id {

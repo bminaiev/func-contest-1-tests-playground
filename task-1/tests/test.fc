@@ -88,3 +88,14 @@ int __test_empty_method_gas_consumption() method_id {
 
   return [gas_used1, gas_used2, gas_used3];
 }
+
+int sum(int x, int y) {
+  return x + y;
+}
+
+[int, int, int] __test_it_should_fail() {
+  var (int gas_used, stack) = invoke_method(sum, [3, 4]);
+  ;; stack only has [7], so it should fail here
+  var [int a, int b] = stack;
+  return [gas_used, a, b];
+}

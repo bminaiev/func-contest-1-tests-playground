@@ -46,7 +46,6 @@ int __test_throw_doesnt_corrupt_stack() {
 }
 
 
-
 (int, cell) build_test_cell(int x, int y) {
   return (12345, begin_cell().store_uint(x, 64).store_uint(y, 64).end_cell());
 }
@@ -110,4 +109,8 @@ int __test_check_stack_depth_after_prev_test() {
   int depth = stack_depth();
   throw_if(100, depth != 0);
   return 0;
+}
+
+() __test_empty_return_value_is_also_fine() {
+  ;; nothing to do here
 }

@@ -1,0 +1,80 @@
+cell gen_msg_to_send(int value) {
+  return begin_cell().store_uint(value, 32).end_cell();
+}
+
+;; 'sign' & 'priv_to_pub' functions could be used for cryptography
+slice gen_query(int priv_key, int valid_until, int mode, cell msg_to_send) {
+    cell request = begin_cell().store_uint(valid_until, 32).store_uint(mode, 8).store_ref(msg_to_send).end_cell();
+    int hash = cell_hash(request);
+    slice signature = sign(hash, priv_key);
+    int pub_key = priv_to_pub(priv_key);
+    return begin_cell().store_uint(pub_key, 256).store_slice(signature).store_ref(request).end_cell().begin_parse();
+}
+
+;; TODO: better check what exactly is stored here
+() assert_some_actions() impure inline {
+    slice actions = get_actions();
+    throw_if(200, slice_empty?(actions));
+}
+
+() set_keys(int priv_key1, int priv_key2) impure {
+    int pub_key1 = priv_to_pub(priv_key1);
+    int pub_key2 = priv_to_pub(priv_key2);
+
+    var (_, stack) = invoke_method(pack_data, [pub_key1, pub_key2]);
+    [cell data] = stack;
+    set_data(data);
+}
+
+int priv_key1() inline {
+  return 12345;
+}
+
+int priv_key2() inline {
+  return 100500;
+}
+
+() set_default_test_parameters() impure {
+    set_keys(priv_key1(), priv_key2());
+    ;; 'set_now' can be used to set current time
+    set_now(0);
+}
+
+_ __test_simple() {
+    set_default_test_parameters();
+
+    int valid_until = 10;
+    int mode = 64;
+    cell msg_to_send = gen_msg_to_send(787788);
+
+    slice query1 = gen_query(priv_key1(), valid_until, mode, msg_to_send);
+    slice query2 = gen_query(priv_key2(), valid_until, mode, msg_to_send);
+
+    var (int gas_used1, _) = invoke_method(recv_external, [query1]);
+    assert_no_actions();
+    var (int gas_used2, _) = invoke_method(recv_external, [query2]);
+    assert_some_actions();
+
+    ;; duplicate queries should not generate actions
+    var (int gas_used3) = invoke_method_expect_fail(recv_external, [query2]);
+    assert_no_actions();
+
+    return [gas_used1, gas_used2, gas_used3];
+}
+
+_ __test_wrong_signature() {
+    set_default_test_parameters();
+
+    int mode = 64;
+    int valid_until = 10;
+
+    cell msg_to_send = gen_msg_to_send(123);
+    cell request = begin_cell().store_uint(valid_until, 32).store_uint(mode, 8).store_ref(msg_to_send).end_cell();
+    int hash = cell_hash(request);
+    slice signature = sign(hash, priv_key1());
+    int pub_key = priv_to_pub(priv_key2()); ;; we signed with a wrong key here!
+    slice query = begin_cell().store_uint(pub_key, 256).store_slice(signature).store_ref(request).end_cell().begin_parse();
+
+    set_keys(priv_key1(), priv_key2());
+    invoke_method_expect_fail(recv_external, [query]);
+}

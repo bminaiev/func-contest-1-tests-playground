@@ -99,3 +99,15 @@ int sum(int x, int y) {
   var [int a, int b] = stack;
   return [gas_used, a, b];
 }
+
+(int, int, int) __test_can_return_more_than_one_stack_entry() {
+  return (1, 2, 3);
+}
+
+int stack_depth() asm "DEPTH";
+
+int __test_check_stack_depth_after_prev_test() {
+  int depth = stack_depth();
+  throw_if(100, depth != 0);
+  return 0;
+}

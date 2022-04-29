@@ -64,14 +64,14 @@ int __test_not_integer_return_types() {
 
 }
 
-;; returned 'gas used' also contains gas used by a wrapper.
-;; It is ~roughly constant, so when developers are optimizing
-;; their contracts, they should care about differences in gas usage
-;; before and after optimizations, not absolute values.
+;; calling an empty method actually takes quite a lot of gas (~600)
+;; it includes storing new c3, and calling method by id
+;; calling method by id inside does 'DICTIGETJMPZ', which requires
+;; checking ~4 different cells, which costs 400 gas
 int __test_empty_method_gas_consumption() method_id {
   var (int gas_used, _) = invoke_method(empty_method, []);
-  throw_if(101, gas_used < 1000);
-  throw_if(102, gas_used > 2000);
+  throw_if(101, gas_used < 500);
+  throw_if(102, gas_used > 700);
   return gas_used;
 }
 
